@@ -1,0 +1,728 @@
+<head>
+
+<link rel="stylesheet" href="https://testingcf.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+<style>
+/*
+   引入字体更新：
+   已为 Noto Serif TC/SC 添加 200 (ExtraLight) 字重
+*/
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Montserrat:wght@200;300;400;500&family=Noto+Serif+SC:wght@200;300;400;600&family=Noto+Serif+TC:wght@200;300;400;600&display=swap');
+
+:root {
+    /* ==========================================================================
+       >>> 用户自定义配置区域 (USER CONFIG)
+       ========================================================================== */
+    --font-main:      'Montserrat', sans-serif;
+    --font-title:     'Cinzel', serif;
+    /* 非英文字体栈 */
+    --font-title-alt: 'Noto Serif TC', 'Noto Serif SC', serif;
+
+    /* [新增] 非英文标题的字重配置 */
+    /* 200: ExtraLight, 300: Light, 400: Regular */
+    --weight-title-cjk: 200;
+
+    /* 外观设置 - 玻璃参数 */
+    --glass-alpha:  0.1;
+    --blur-amount:  5px;
+
+    /* 布局尺寸 */
+    --capsule-size: 48px; /* 胶囊初始大小 */
+
+    /* =======================================================
+       >>> 手机端优化配置 (MOBILE TWEAKS)
+       ======================================================= */
+
+    /* [A] 阴影与边界控制 */
+    --mob-sh-blur:      16px;        /* 阴影模糊半径 */
+    --mob-sh-y:         6px;         /* 阴影垂直位移 */
+    --mob-sh-spread:    -3px;        /* 阴影扩散(负值收缩) */
+    --mob-sh-alpha:     0.35;        /* 阴影浓度 */
+    --mob-safe-padding: 15px 15px 35px 15px; /* 外部安全边距 (上 右 下 左) */
+
+    /* [B] 布局间距控制 */
+    --mob-pad-inner:    18px 15px;   /* 内部内边距 (上下 左右) */
+    --mob-grid-gap:     10px;        /* 各行元素之间的垂直间距 */
+
+    /* [C] 内部变量 (PC/Global) - 勿动 */
+    --accent: #ffffff;
+    --text-main: rgba(255, 255, 255, 0.95);
+    --text-dim: rgba(255, 255, 255, 0.4);
+    --glass-bg: rgba(15, 15, 15, var(--glass-alpha));
+    --edge-light: rgba(255, 255, 255, 0.15);
+
+    /* 独立的按钮尺寸配置 (PC默认) */
+    --sz-btn-vol:   1.34rem;
+    --sz-btn-mode:  0.96rem;
+    --sz-btn-list:  0.9rem;
+    --sz-btn-prev:  0.9rem;
+    --sz-btn-next:  0.9rem;
+    --sz-btn-play:  2.3rem;
+    --sh-offset-y:  25px;
+}
+
+body {
+    margin: 0;
+    padding: 20px 15px 40px 15px; /* PC端默认：预留足够的呼吸空间 */
+    overflow: visible;
+    display: flex;
+    justify-content: center;
+    /* 确保 body 能够容纳收缩后的居中对齐 */
+    min-height: 100px;
+    align-items: flex-start;
+}
+
+#player-master {
+    font-family: var(--font-main);
+    width: 100%;
+    max-width: 440px;
+    position: relative;
+    user-select: none;
+    color: var(--text-main);
+    /* 居中布局容器 */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* 核心面板：负责变形的容器 */
+.glass-panel {
+    position: relative;
+    /* 初始状态：胶囊 */
+    width: var(--capsule-size);
+    height: var(--capsule-size);
+    border-radius: 50px; /* 圆形 */
+    padding: 0;          /* 胶囊态无内边距 */
+
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--blur-amount)) saturate(150%);
+    -webkit-backdrop-filter: blur(var(--blur-amount)) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-left: 1px solid var(--edge-light);
+    border-top: 1px solid var(--edge-light);
+
+    /* PC端默认大阴影 */
+    box-shadow: 0 10px 30px -10px rgba(0,0,0,0.3);
+
+    overflow: hidden; /* 关键：剪裁内容 */
+    transition: box-shadow 0.4s ease;
+    cursor: default;
+}
+
+/* 胶囊态特有的交互：鼠标悬停发光 */
+.glass-panel.is-collapsed {
+    cursor: pointer;
+}
+.glass-panel.is-collapsed:hover {
+    box-shadow: 0 0 15px var(--text-dim), inset 0 0 10px rgba(255,255,255,0.1);
+    border-color: rgba(255,255,255,0.3);
+}
+
+.noise {
+    position: absolute; inset: 0; opacity: 0.06; pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 100px 100px;
+    z-index: 0;
+}
+
+/* =======================================================
+   >>> 胶囊视图 (Capsule View)
+   ======================================================= */
+.capsule-view {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+    pointer-events: none; /* 让点击穿透给 panel */
+    opacity: 1;
+}
+
+/* 律动波形 SVG */
+.wave-svg {
+    width: 20px;
+    height: 20px;
+}
+.wave-bar {
+    fill: var(--accent);
+    transform-origin: bottom;
+    animation: wave-anim 1s ease-in-out infinite alternate;
+}
+.wave-bar:nth-child(1) { animation-delay: -0.4s; }
+.wave-bar:nth-child(2) { animation-delay: -0.2s; }
+.wave-bar:nth-child(3) { animation-delay: 0s; }
+
+/* 只有播放时才跳动 */
+.paused-anim .wave-bar {
+    animation-play-state: paused;
+    transform: scaleY(0.2); /* 暂停时变短 */
+    transition: transform 0.3s;
+}
+
+@keyframes wave-anim {
+    0% { transform: scaleY(0.3); }
+    100% { transform: scaleY(1); }
+}
+
+
+/* =======================================================
+   >>> 完整视图内容包裹器 (Full Content)
+   ======================================================= */
+.panel-content {
+    opacity: 0; /* 默认不可见 */
+    visibility: hidden;
+    padding: 25px; /* PC默认内边距 */
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+/* 最小化按钮 */
+.minimize-btn {
+    position: absolute;
+    top: 10px; right: 10px;
+    width: 24px; height: 24px;
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    z-index: 50;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    transition: 0.2s;
+}
+.minimize-btn:hover {
+    background: rgba(255,255,255,0.1);
+    color: var(--accent);
+}
+
+/* --- 原有布局样式保持不变 --- */
+.layout-grid {
+    position: relative; z-index: 5;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+    grid-template-rows: auto auto auto;
+    gap: 15px; /* PC默认间距 */
+}
+
+.hero-time {
+    grid-column: 1;
+    font-size: 3.5rem; font-weight: 200; line-height: 0.9;
+    letter-spacing: -2px; color: var(--text-dim);
+    font-feature-settings: "tnum"; align-self: end;
+}
+.track-meta {
+    grid-column: 2; text-align: right;
+    display: flex; flex-direction: column; justify-content: flex-end;
+    overflow: hidden;
+}
+.title-text {
+    font-family: var(--font-title); font-size: 1.3rem; font-weight: 700;
+    margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.artist-text {
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 2px;
+    opacity: 0.6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.seek-wrapper {
+    grid-column: 1 / span 2; margin: 15px 0; padding: 12px 0;
+    position: relative; cursor: pointer;
+}
+.seek-bar { height: 1px; background: rgba(255,255,255,0.1); width: 100%; position: relative; }
+.seek-fill { position: absolute; height: 100%; background: var(--accent); width: 0%; box-shadow: 0 0 10px white; }
+
+.bottom-actions {
+    grid-column: 1 / span 2; display: flex; justify-content: space-between; align-items: center;
+}
+.meta-btns, .action-btns { display: flex; align-items: center; }
+.meta-btns { gap: 15px; /* PC默认 gap */ position: relative; }
+.action-btns { gap: 20px; /* PC默认 gap */ }
+
+.icon-btn {
+    background: none; border: none; color: var(--text-dim);
+    cursor: pointer; transition: 0.3s; padding: 5px;
+    display: flex; align-items: center; justify-content: center;
+    /* 关键：防止 flex box 挤压按钮本身 */
+    flex-shrink: 0;
+}
+.icon-btn:hover { color: var(--accent); transform: scale(1.1); }
+.icon-btn i.bi { line-height: 1; vertical-align: middle; }
+
+/* 按钮尺寸 */
+#btn-vol  { font-size: var(--sz-btn-vol); }
+#btn-mode { font-size: var(--sz-btn-mode); }
+#btn-list { font-size: var(--sz-btn-list); }
+#btn-prev { font-size: var(--sz-btn-prev); }
+#btn-next { font-size: var(--sz-btn-next); }
+#btn-play { font-size: var(--sz-btn-play); color: var(--accent); }
+
+/* 音量弹窗 */
+.vol-popover {
+    position: absolute; bottom: 40px; left: 2px; width: 30px; height: 100px;
+    background: rgba(255, 255, 255, 0.25); backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 15px;
+    display: flex; flex-direction: column; align-items: center; padding: 12px 0;
+    visibility: hidden; opacity: 0; transform: translateY(10px); z-index: 100;
+}
+.vol-slider-rail { flex: 1; width: 2px; background: rgba(255,255,255,0.2); position: relative; border-radius: 1px; cursor: pointer; }
+.vol-slider-fill { position: absolute; bottom: 0; width: 100%; background: var(--accent); height: 50%; }
+.vol-slider-handle { position: absolute; left: 50%; bottom: 50%; width: 10px; height: 10px; background: white; border-radius: 50%; transform: translate(-50%, 50%); box-shadow: 0 0 5px rgba(0,0,0,0.3); }
+
+/* 歌单抽屉 */
+.drawer { height: 0; overflow: hidden; opacity: 0; border-top: 0px solid rgba(255,255,255,0.05); transition: none; }
+.drawer-content { padding: 15px 0; font-size: 0.8rem; max-height: 150px; overflow-y: auto; padding-right: 5px; }
+.drawer-content::-webkit-scrollbar { width: 4px; }
+.drawer-content::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 4px; }
+.track-li { padding: 8px 10px; opacity: 0.5; cursor: pointer; border-radius: 2px; display: flex; justify-content: space-between; overflow: hidden; }
+.track-li.active { opacity: 1; background: rgba(255,255,255,0.05); color: var(--accent); }
+.track-li span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.track-li span:first-child { flex: 1; margin-right: 10px; }
+.track-li span:last-child { max-width: 30%; text-align: right; }
+
+.error-box { display: none; background: rgba(255,0,0,0.1); border-left: 3px solid #ff4444; padding: 20px; }
+.has-error .glass-panel { display: none; }
+.has-error .error-box { display: block; }
+
+/* 手机端适配：应用顶部配置的变量 */
+@media screen and (max-width: 500px) {
+    :root {
+        --sz-btn-vol: 1.1rem; --sz-btn-mode: 0.85rem; --sz-btn-list: 0.85rem;
+        --sz-btn-prev: 0.85rem; --sz-btn-next: 0.85rem; --sz-btn-play: 2.0rem;
+        --sh-offset-y: 15px;
+    }
+    body {
+        padding: var(--mob-safe-padding);
+    }
+
+    .glass-panel {
+        box-shadow: 0 var(--mob-sh-y) var(--mob-sh-blur) var(--mob-sh-spread) rgba(0,0,0,var(--mob-sh-alpha));
+    }
+
+    /* === 手机端专用布局重写：实现弹性同步压缩 === */
+    .panel-content { padding: var(--mob-pad-inner); }
+    .layout-grid { gap: var(--mob-grid-gap); }
+
+    /* 1. 强制整行占满，为后续的space-between提供基准 */
+    .bottom-actions {
+        display: flex;
+        width: 100%;
+        justify-content: space-between; /* 拉开左右两组，利用剩余的4%做呼吸空隙 */
+    }
+
+    /* 2. 左侧辅助组 (音量/模式/列表) */
+    .meta-btns {
+        flex-basis: 38%; /* 锁定宽度占比 */
+        width: 38%;
+        gap: 0; /* 移除固定间距 */
+        display: flex;
+        justify-content: space-between; /* 弹性分布：自动挤压间距 */
+    }
+
+    /* 3. 右侧控制组 (上一首/播放/下一首) */
+    .action-btns {
+        flex-basis: 58%; /* 锁定宽度占比 */
+        width: 58%;
+        gap: 0; /* 移除固定间距 */
+        display: flex;
+        justify-content: space-between; /* 弹性分布：自动挤压间距 */
+        /* 此时最右边的按钮会自动紧贴容器右边缘，解决溢出问题 */
+    }
+
+    .hero-time {
+        grid-column: 1 / -1; grid-row: 1; font-size: 2.8rem;
+        z-index: 0; opacity: 0.25; align-self: end; margin-bottom: -5px;
+    }
+    .track-meta {
+        grid-column: 1 / -1; grid-row: 1; z-index: 2; width: 100%;
+    }
+}
+</style>
+<script src="https://testingcf.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
+</head>
+<body>
+
+<div id="player-master">
+
+    <div class="error-box" id="error-box">
+        <div style="font-weight: bold; color: #ff6e6e; margin-bottom: 5px;" id="err-t"></div>
+        <div style="font-size: 0.85rem; opacity: 0.8;" id="err-m"></div>
+    </div>
+
+    <div class="glass-panel is-collapsed" id="main-panel">
+        <div class="noise"></div>
+
+
+        <div class="capsule-view" id="capsule-view">
+            <svg class="wave-svg faded-wave" viewBox="0 0 24 24">
+                <rect class="wave-bar" x="4" y="10" width="4" height="10" rx="2"></rect>
+                <rect class="wave-bar" x="10" y="5" width="4" height="15" rx="2"></rect>
+                <rect class="wave-bar" x="16" y="8" width="4" height="12" rx="2"></rect>
+            </svg>
+        </div>
+
+
+        <div class="panel-content" id="panel-content">
+
+            <button class="minimize-btn" id="btn-minimize" title="Collapse">
+                <i class="bi bi-dash-lg"></i>
+            </button>
+
+            <div class="layout-grid">
+                <div class="hero-time" id="display-time">00:00</div>
+                <div class="track-meta">
+                    <div class="title-text" id="track-t">Not Playing</div>
+                    <div class="artist-text" id="track-a">Offline</div>
+                </div>
+
+                <div class="seek-wrapper" id="seek-ctrl">
+                    <div class="seek-bar"><div class="seek-fill" id="seek-f"></div></div>
+                </div>
+
+                <div class="bottom-actions">
+                    <div class="meta-btns">
+                        <div class="vol-popover" id="vol-pop">
+                            <div class="vol-slider-rail" id="vol-rail">
+                                <div class="vol-slider-fill" id="vol-f"></div>
+                                <div class="vol-slider-handle" id="vol-h"></div>
+                            </div>
+                        </div>
+                        <button class="icon-btn" id="btn-vol"><i class="bi bi-volume-down-fill"></i></button>
+                        <button class="icon-btn" id="btn-mode"><i class="bi bi-repeat"></i></button>
+                        <button class="icon-btn" id="btn-list"><i class="fa-solid fa-bars-staggered"></i></button>
+                    </div>
+                    <div class="action-btns">
+                        <button class="icon-btn" id="btn-prev"><i class="fa-solid fa-chevron-left"></i></button>
+                        <button class="icon-btn play-trigger" id="btn-play"><i class="bi bi-play-fill"></i></button>
+                        <button class="icon-btn" id="btn-next"><i class="fa-solid fa-chevron-right"></i></button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="drawer" id="drawer">
+                <div class="drawer-content" id="list-c"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    const el = {
+        master: document.getElementById('player-master'),
+        panel: document.getElementById('main-panel'),
+        capsule: document.getElementById('capsule-view'),
+        content: document.getElementById('panel-content'),
+        minBtn: document.getElementById('btn-minimize'),
+        wave: document.querySelector('.capsule-view'),
+
+        time: document.getElementById('display-time'),
+        title: document.getElementById('track-t'),
+        artist: document.getElementById('track-a'),
+        seekF: document.getElementById('seek-f'),
+        playIcon: document.querySelector('#btn-play i'),
+        modeIcon: document.querySelector('#btn-mode i'),
+        volPop: document.getElementById('vol-pop'),
+        volF: document.getElementById('vol-f'),
+        volH: document.getElementById('vol-h'),
+        listC: document.getElementById('list-c')
+    };
+
+    let api = null;
+    let volOpen = false;
+    let listOpen = false;
+    let isExpanded = false;
+    let isAnimating = false;
+
+    // 字体兼容性正则
+    const isAllEnglish = (str) => /^[a-zA-Z0-9\s\-'",.:;!?&()\[\]\/\\@#$%^*+=~`_]+$/.test(str);
+
+    async function init() {
+        try {
+            api = await _findAPI();
+            await api.requestInitialization();
+
+            const state = api.getCurrentState();
+            render(state);
+            updateWave(state.playbackState === 'PLAYING');
+
+            api.onFullStateUpdate(s => {
+                render(s);
+                updateWave(s.playbackState === 'PLAYING');
+            });
+
+            api.onTimeUpdate(t => {
+                const pct = t.duration ? (t.currentTime / t.duration) * 100 : 0;
+                // 只有展开时才更新进度条动画，节省性能
+                if (isExpanded) {
+                    gsap.to(el.seekF, { width: pct + '%', duration: 0.2, overwrite: true });
+                    el.time.textContent = fmt(t.currentTime);
+                }
+            });
+
+            bind();
+            // 默认就是胶囊，无需额外动画，直接显示
+            el.master.classList.add('loaded');
+
+        } catch (e) {
+            el.master.classList.add('has-error');
+            document.getElementById('err-t').textContent = '加载失败';
+            document.getElementById('err-m').textContent = e.message;
+            el.master.classList.add('loaded');
+        }
+    }
+
+    // 更新胶囊律动状态
+    function updateWave(isPlaying) {
+        if (isPlaying) el.wave.classList.remove('paused-anim');
+        else el.wave.classList.add('paused-anim');
+    }
+
+    // 真正的“变形”逻辑
+    function toggleExpand(expand) {
+        if (isAnimating || expand === isExpanded) return;
+        isAnimating = true;
+        isExpanded = expand;
+
+        const tl = gsap.timeline({
+            onComplete: () => { isAnimating = false; }
+        });
+
+        if (expand) {
+            // ---> 展开序列
+            el.panel.classList.remove('is-collapsed');
+
+            // 1. 胶囊淡出
+            tl.to(el.capsule, { opacity: 0, duration: 0.2 });
+
+            // 2. 核心变形 (利用 Flip 思想: 设为Auto计算高度，然后Tween)
+            tl.add(() => {
+                // 记录起始尺寸
+                const startW = el.panel.offsetWidth;
+                const startH = el.panel.offsetHeight;
+
+                // 强制应用目标状态以测量自然尺寸
+                el.panel.style.width = '100%';
+                el.panel.style.height = 'auto';
+                el.panel.style.borderRadius = '4px';
+
+                // 解禁内容以便测量，但保持透明
+                el.content.style.visibility = 'visible';
+
+                const targetW = el.panel.offsetWidth;
+                const targetH = el.panel.offsetHeight; // 这是内容撑开后的高度
+
+                // 立即重置回起始状态 (JavaScript执行是同步的，用户看不到闪烁)
+                el.panel.style.width = startW + 'px';
+                el.panel.style.height = startH + 'px';
+                el.panel.style.borderRadius = '50px';
+
+                // 开始动画
+                gsap.to(el.panel, {
+                    width: targetW,
+                    height: targetH,
+                    borderRadius: 4,
+                    duration: 0.5,
+                    ease: "power2.inOut",
+                    onComplete: () => {
+                        // 动画结束清理内联样式，交给CSS管理
+                        el.panel.style.width = '100%';
+                        el.panel.style.height = 'auto';
+                    }
+                });
+            });
+
+            // 3. 内容延迟浮现
+            tl.to(el.content, { opacity: 1, duration: 0.4 }, "-=0.2");
+            // 子元素 Stagging 效果 (时间、歌名、按钮依次进场)
+            tl.from([el.time, document.querySelector('.track-meta'), el.seekF.parentElement, document.querySelector('.bottom-actions')], {
+                y: 15, opacity: 0, stagger: 0.05, duration: 0.4, ease: "back.out(1.2)"
+            }, "-=0.3");
+
+        } else {
+            // <--- 收起序列
+
+            // 1. 内容淡出
+            tl.to(el.content, { opacity: 0, duration: 0.2, onComplete: () => {
+                el.content.style.visibility = 'hidden';
+            }});
+
+            // 2. 变形回胶囊
+            tl.to(el.panel, {
+                width: 48, // 对应 CSS var(--capsule-size)
+                height: 48,
+                borderRadius: 50,
+                duration: 0.4,
+                ease: "power2.inOut",
+                onComplete: () => {
+                     el.panel.classList.add('is-collapsed');
+                     // 收起抽屉状态 (强制模式：true)
+                     closeList(true);
+                     listOpen = false;
+                }
+            });
+
+            // 3. 胶囊淡入
+            tl.to(el.capsule, { opacity: 1, duration: 0.2 }, "-=0.1");
+        }
+    }
+
+    /**
+     * 关闭歌单列表
+     * @param {boolean} immediate 是否跳过动画直接重置（用于胶囊最小化时）
+     */
+    function closeList(immediate = false) {
+        const d = document.getElementById('drawer');
+        const target = { height: 0, opacity: 0, borderTopWidth: 0 };
+
+        if(immediate) {
+            gsap.set(d, target);
+        } else {
+            gsap.to(d, { ...target, duration: 0.25, ease: "none" });
+        }
+        document.getElementById('btn-list').style.color = 'var(--text-dim)';
+    }
+
+    function render(s) {
+        if (!s.currentItem) {
+            el.title.textContent = "Silence";
+            el.artist.textContent = "Empty";
+        } else {
+            if(el.title.textContent !== s.currentItem.title) {
+                // 如果已展开，才播放文字切换动画
+                if(isExpanded) gsap.from([el.title, el.artist], { opacity: 0, x: 10, stagger: 0.1 });
+            }
+            el.title.textContent = s.currentItem.title;
+            el.artist.textContent = s.currentItem.artist || 'Unknown';
+            // 根据中英文动态应用样式和字重变量
+            const isEn = isAllEnglish(s.currentItem.title);
+            el.title.style.fontFamily = isEn ? 'var(--font-title)' : 'var(--font-title-alt)';
+            el.title.style.fontWeight = isEn ? '700' : 'var(--weight-title-cjk)';
+        }
+
+        el.playIcon.className = s.playbackState === 'PLAYING' ? 'bi bi-pause-fill' : 'bi bi-play-fill';
+
+        // 渲染列表
+        el.listC.innerHTML = s.playlist.map((t, i) => `
+            <div class="track-li ${s.currentItem?.title === t.title ? 'active' : ''}" onclick="window._pPlay(${i})">
+                <span>${i+1}. ${t.title}</span>
+                <span style="opacity:0.5; font-size:0.75em">${t.artist || ''}</span>
+            </div>
+        `).join('');
+        window._pPlay = (i) => api.playIndex(i);
+
+        // 模式
+        let mIcon = 'bi-repeat';
+        if (s.playbackMode === 'single') mIcon = 'bi-repeat-1';
+        if (s.playbackMode === 'random') mIcon = 'bi-shuffle';
+        el.modeIcon.className = `bi ${mIcon}`;
+
+        if(!window._vDragging) {
+            el.volF.style.height = (s.masterVolume * 100) + '%';
+            el.volH.style.bottom = (s.masterVolume * 100) + '%';
+        }
+    }
+
+    function bind() {
+        // 胶囊点击 -> 展开
+        el.panel.onclick = (e) => {
+            // 如果是折叠状态，点击任何地方都展开
+            if (!isExpanded) toggleExpand(true);
+        };
+
+        // 最小化按钮 -> 收起
+        el.minBtn.onclick = (e) => {
+            e.stopPropagation(); // 防止冒泡触发 panel click
+            toggleExpand(false);
+        };
+
+        // 常规绑定
+        document.getElementById('btn-play').onclick = (e) => { e.stopPropagation(); api.togglePlayPause(); };
+        document.getElementById('btn-prev').onclick = (e) => { e.stopPropagation(); api.playPrev(); };
+        document.getElementById('btn-next').onclick = (e) => { e.stopPropagation(); api.playNext(); };
+
+        document.getElementById('btn-mode').onclick = (e) => {
+            e.stopPropagation();
+            const s = api.getCurrentState();
+            if(!s) return;
+            const modes = ['list', 'single', 'random'];
+            const next = modes[(modes.indexOf(s.playbackMode||'list') + 1) % modes.length];
+            api.setPlaybackMode(next);
+        };
+
+        // 列表
+        document.getElementById('btn-list').onclick = (e) => {
+            e.stopPropagation();
+            listOpen = !listOpen;
+            const d = document.getElementById('drawer');
+            if(listOpen) {
+                gsap.to(d, { height: 'auto', opacity: 1, borderTopWidth: 1, duration: 0.35, ease: "none" });
+                document.getElementById('btn-list').style.color = 'var(--accent)';
+            } else {
+                closeList(false); // 正常点击：不强制跳过动画
+            }
+        };
+
+        // 音量
+        document.getElementById('btn-vol').onclick = (e) => {
+            e.stopPropagation();
+            volOpen = !volOpen;
+            gsap.to(el.volPop, { autoAlpha: volOpen ? 1 : 0, y: volOpen ? 0 : 10, duration: 0.3 });
+        };
+
+        // 阻止点击音量条冒泡
+        el.volPop.onclick = e => e.stopPropagation();
+
+        const rail = document.getElementById('vol-rail');
+        const handleVol = (e) => {
+            const r = rail.getBoundingClientRect();
+            let p = 1 - ((e.clientY - r.top) / r.height);
+            p = Math.max(0, Math.min(1, p));
+            el.volF.style.height = (p * 100) + '%';
+            el.volH.style.bottom = (p * 100) + '%';
+            api.setLiveVolume(p);
+            return p;
+        };
+        rail.onmousedown = (e) => {
+            e.stopPropagation(); // 关键：防止拖动音量时触发面板点击
+            window._vDragging = true;
+            handleVol(e);
+            const move = (e) => handleVol(e);
+            const up = (e) => {
+                window._vDragging = false;
+                api.persistVolumeAndBroadcast(handleVol(e));
+                window.removeEventListener('mousemove', move);
+                window.removeEventListener('mouseup', up);
+            };
+            window.addEventListener('mousemove', move);
+            window.addEventListener('mouseup', up);
+        };
+
+        document.getElementById('seek-ctrl').onclick = (e) => {
+            e.stopPropagation();
+            const r = e.currentTarget.getBoundingClientRect();
+            api.seekTo((e.clientX - r.left) / r.width);
+        };
+    }
+
+    function fmt(s) {
+        if(!s) return "00:00";
+        const m = Math.floor(s/60);
+        const sec = Math.floor(s%60);
+        return `${m.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}`;
+    }
+
+    function _findAPI() {
+        return new Promise((res, rej) => {
+            let c = 0;
+            const i = setInterval(() => {
+                if(top.musicPlayerAPI) { clearInterval(i); res(top.musicPlayerAPI); }
+                if(c++ > 40) { clearInterval(i); rej(new Error('未连接上脚本，请检查开关或刷新页面')); }
+            }, 250);
+        });
+    }
+
+    init();
+})();
+</script>
+</body>
